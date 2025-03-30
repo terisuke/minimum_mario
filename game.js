@@ -74,22 +74,36 @@ function resetGameStats() {
     // 時間は main シーン開始時にリセット
 }
 
+// --- ヘルパー関数: オブジェクト配置 ---
+function placeObjects(count, startX, endX, yPosOrRange, createObjectFunc) {
+    const rangeWidth = endX - startX;
+    const sectionWidth = rangeWidth / count;
+    for (let i = 0; i < count; i++) {
+        const sectionStart = startX + i * sectionWidth;
+        const x = rand(sectionStart, sectionStart + sectionWidth);
+        const y = typeof yPosOrRange === 'number' ? yPosOrRange : rand(yPosOrRange[0], yPosOrRange[1]);
+        add(createObjectFunc(x, y));
+    }
+}
+
+// --- ヘルパー関数: ゲームオーバー遷移 ---
+function transitionToGameOver(sound = "gameover") {
+    stopBGM();
+    wait(0.1, () => {
+        play(sound);
+        wait(0.5, () => {
+            go("gameover");
+        });
+    });
+}
+
 // --- 残機を減らす関数 ---
 function loseLife() {
     lives--;
-    stopBGM(); // やられたらBGM停止
 
     if (lives <= 0) {
-        // 少し待ってからゲームオーバー効果音とシーン遷移
-        wait(0.1, () => {
-            play("gameover");
-            wait(0.5, () => {
-                go("gameover");
-            });
-        });
+        transitionToGameOver();
     } else {
-        // 残機があればメインシーンをリスタート
-        // コイン数はリセットされる (mainシーン開始時に0になる)
         go("main");
     }
 }
@@ -179,89 +193,42 @@ scene("main", () => {
         "player",
     ]);
 
-    // タイマーの設定
-    const timer = loop(1, () => {
-        if (!player.isAlive) return; // プレイヤーが死んでいたら何もしない
+    // プラットフォームの配置
+    placeObjects(PLATFORM_COUNT, OBJECT_START_X, OBJECT_END_X, PLATFORM_Y, (x, y) => [
+        rect(96, 32),
+        pos(x, y),
+        color(100, 200, 100),
+        area(),
+        body({ isStatic: true }),
+        "platform",
+    ]);
 
-        timeLeft--;
-        timeLabel.text = "残り時間: " + timeLeft + "秒";
+    // コインの配置
+    placeObjects(COIN_COUNT, OBJECT_START_X, OBJECT_END_X, [COIN_Y_MIN, COIN_Y_MAX], (x, y) => [
+        circle(16),
+        pos(x, y),
+        color(255, 215, 0),
+        area(),
+        "coin",
+    ]);
 
-        if (timeLeft <= 0) {
-            if (!player.isAlive) return; // 二重実行防止
-            player.isAlive = false;
-            stopBGM();
-            wait(0.1, () => { // 効果音再生のための短い待機
-                play("gameover");
-                wait(0.5, () => { // シーン遷移のための待機
-                    go("gameover"); // タイムオーバー時は直接ゲームオーバーへ
-                });
-            });
-        }
-    });
-
-    // カメラをプレイヤーに追従 & 落下死判定
-    player.onUpdate(() => {
-        if (!player.isAlive) return;
-
-        // カメラ位置をプレイヤーに追従させる (Y座標は固定気味に)
-        camPos(player.pos.x, GAME_HEIGHT / 2.5);
-
-        // 落下死判定
-        if (player.pos.y > FALL_DEATH_Y) {
-            if (!player.isAlive) return; // 二重実行防止
-            player.isAlive = false;
-            loseLife(); // 残機を減らす処理へ
-        }
-    });
-
-    // プラットフォームの配置 (ランダム)
-    for (let i = 0; i < PLATFORM_COUNT; i++) {
-        const x = rand(OBJECT_START_X, OBJECT_END_X);
-        add([
-            rect(96, 32),
-            pos(x, PLATFORM_Y),
-            color(100, 200, 100),
-            area(),
-            body({ isStatic: true }),
-            "platform", // 必要であればタグ付け
-        ]);
-    }
-
-    // コインの配置 (ランダム、ある程度分散)
-    const sectionWidth = (OBJECT_END_X - OBJECT_START_X) / COIN_COUNT;
-    for (let i = 0; i < COIN_COUNT; i++) {
-        const sectionStart = OBJECT_START_X + i * sectionWidth;
-        const x = rand(sectionStart, sectionStart + sectionWidth);
-        const y = rand(COIN_Y_MIN, COIN_Y_MAX);
-        add([
-            circle(16),
-            pos(x, y),
-            color(255, 215, 0),
-            area(),
-            "coin",
-        ]);
-    }
-
-    // 敵の配置 (ランダム、ある程度分散)
-    const enemySectionWidth = (OBJECT_END_X - OBJECT_START_X) / ENEMY_COUNT;
-    for (let i = 0; i < ENEMY_COUNT; i++) {
-        const sectionStart = OBJECT_START_X + i * enemySectionWidth;
-        const x = rand(sectionStart, sectionStart + enemySectionWidth);
+    // 敵の配置
+    placeObjects(ENEMY_COUNT, OBJECT_START_X, OBJECT_END_X, ENEMY_Y, (x, y) => {
         const moveDistance = rand(ENEMY_MOVE_DISTANCE_MIN, ENEMY_MOVE_DISTANCE_MAX);
-        add([
+        return [
             rect(32, 32),
-            pos(x, ENEMY_Y),
+            pos(x, y),
             color(255, 0, 0),
             area(),
-            { // 敵の状態
+            {
                 moveSpeed: ENEMY_MOVE_SPEED,
-                dir: 1, // 移動方向 (1: 右, -1: 左)
+                dir: 1,
                 startX: x,
                 moveDistance: moveDistance,
             },
             "enemy",
-        ]);
-    }
+        ];
+    });
 
     // 敵の動き
     onUpdate("enemy", (enemy) => {
@@ -338,6 +305,35 @@ scene("main", () => {
     // 必要であればシーン離脱時に timer.cancel() を呼ぶ
     player.onDestroy(() => {
         timer.cancel(); // プレイヤーが破棄されるタイミングでタイマー停止 (念のため)
+    });
+
+    // タイマーの設定
+    const timer = loop(1, () => {
+        if (!player.isAlive) return;
+
+        timeLeft--;
+        timeLabel.text = "残り時間: " + timeLeft + "秒";
+
+        if (timeLeft <= 0) {
+            if (!player.isAlive) return;
+            player.isAlive = false;
+            transitionToGameOver();
+        }
+    });
+
+    // カメラをプレイヤーに追従 & 落下死判定
+    player.onUpdate(() => {
+        if (!player.isAlive) return;
+
+        // カメラ位置をプレイヤーに追従させる (Y座標は固定気味に)
+        camPos(player.pos.x, GAME_HEIGHT / 2.5);
+
+        // 落下死判定
+        if (player.pos.y > FALL_DEATH_Y) {
+            if (!player.isAlive) return; // 二重実行防止
+            player.isAlive = false;
+            loseLife(); // 残機を減らす処理へ
+        }
     });
 
 });
