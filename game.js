@@ -114,29 +114,6 @@ scene("main", () => {
     coinsCollected = 0; // シーン開始時にコイン数をリセット
     let timeLeft = TIME_LIMIT; // シーン開始時にタイマーリセット
 
-    // レベル全体の定義
-    const levelConf = {
-        width: 32,
-        height: 32,
-        // "=" : 地面ブロック
-        "=": () => [
-            rect(32, 32),
-            color(100, 200, 100),
-            area(),
-            body({ isStatic: true }),
-            "ground",
-        ],
-        // "*" : ゴール
-        "*": () => [
-            rect(32, 128), // サイズ調整
-            pos(0, -96), // Y座標を地面に合わせるためのオフセット
-            color(255, 215, 0),
-            area(),
-            "goal",
-        ],
-        // 他の要素はコードで直接配置
-    };
-
     // 地面の生成 (シンプル化のため addLevel は使わずループで生成)
     for (let i = 0; i < LEVEL_WIDTH / 32; i++) {
         add([
@@ -192,6 +169,40 @@ scene("main", () => {
         },
         "player",
     ]);
+
+    // タイマーの設定
+    const timer = loop(1, () => {
+        if (!player.isAlive) return;
+
+        timeLeft--;
+        timeLabel.text = "残り時間: " + timeLeft + "秒";
+
+        if (timeLeft <= 0) {
+            if (!player.isAlive) return;
+            player.isAlive = false;
+            transitionToGameOver();
+        }
+    });
+
+    // カメラをプレイヤーに追従 & 落下死判定
+    player.onUpdate(() => {
+        if (!player.isAlive) return;
+
+        // カメラ位置をプレイヤーに追従させる (Y座標は固定気味に)
+        camPos(player.pos.x, GAME_HEIGHT / 2.5);
+
+        // 落下死判定
+        if (player.pos.y > FALL_DEATH_Y) {
+            if (!player.isAlive) return; // 二重実行防止
+            player.isAlive = false;
+            loseLife(); // 残機を減らす処理へ
+        }
+    });
+
+    // プレイヤーが破棄されるタイミングでタイマー停止
+    player.onDestroy(() => {
+        timer.cancel();
+    });
 
     // プラットフォームの配置
     placeObjects(PLATFORM_COUNT, OBJECT_START_X, OBJECT_END_X, PLATFORM_Y, (x, y) => [
@@ -299,43 +310,6 @@ scene("main", () => {
             });
         });
     });
-
-    // 注意: loopタイマーはシーンを抜けても自動で止まらない場合がある
-    // player.isAlive フラグで制御しているため、大きな問題はないが、
-    // 必要であればシーン離脱時に timer.cancel() を呼ぶ
-    player.onDestroy(() => {
-        timer.cancel(); // プレイヤーが破棄されるタイミングでタイマー停止 (念のため)
-    });
-
-    // タイマーの設定
-    const timer = loop(1, () => {
-        if (!player.isAlive) return;
-
-        timeLeft--;
-        timeLabel.text = "残り時間: " + timeLeft + "秒";
-
-        if (timeLeft <= 0) {
-            if (!player.isAlive) return;
-            player.isAlive = false;
-            transitionToGameOver();
-        }
-    });
-
-    // カメラをプレイヤーに追従 & 落下死判定
-    player.onUpdate(() => {
-        if (!player.isAlive) return;
-
-        // カメラ位置をプレイヤーに追従させる (Y座標は固定気味に)
-        camPos(player.pos.x, GAME_HEIGHT / 2.5);
-
-        // 落下死判定
-        if (player.pos.y > FALL_DEATH_Y) {
-            if (!player.isAlive) return; // 二重実行防止
-            player.isAlive = false;
-            loseLife(); // 残機を減らす処理へ
-        }
-    });
-
 });
 
 // --- ゲームオーバーシーン ---
