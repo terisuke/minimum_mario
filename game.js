@@ -26,6 +26,8 @@ const COIN_COUNT = 10;
 const PLATFORM_COUNT = 5;
 const OBJECT_START_X = 300; // オブジェクト配置開始X座標
 const OBJECT_END_X = 1800; // オブジェクト配置終了X座標
+const TIME_SCORE_MULTIPLIER = 50; // 残り時間のスコア倍率
+const COIN_SCORE_MULTIPLIER = 100; // コインのスコア倍率
 
 kaboom({
     width: GAME_WIDTH,
@@ -48,6 +50,8 @@ loadSound("gameover", "assets/システムエラー・不正解音.mp3");
 let lives = INITIAL_LIVES;
 let coinsCollected = 0;
 let currentBGM = null; // 再生中のBGMインスタンスを管理
+let highScore = 0; // ハイスコアを保存
+let timeLeft = TIME_LIMIT; // 残り時間をグローバル変数として定義
 
 function playBGM(track, options = {}) {
     stopBGM(); // 既存のBGMがあれば停止
@@ -100,7 +104,7 @@ function loseLife() {
 scene("main", () => {
     playBGM("bgm");
     coinsCollected = 0; // シーン開始時にコイン数をリセット
-    let timeLeft = TIME_LIMIT; // シーン開始時にタイマーリセット
+    timeLeft = TIME_LIMIT; // シーン開始時にタイマーリセット
 
     for (let i = 0; i < LEVEL_WIDTH / 32; i++) {
         add([
@@ -294,25 +298,47 @@ scene("gameover", () => {
 scene("clear", () => {
     stopBGM();
 
+    const timeScore = timeLeft * TIME_SCORE_MULTIPLIER;
+    const coinScore = coinsCollected * COIN_SCORE_MULTIPLIER;
+    const totalScore = timeScore + coinScore;
+
+    if (totalScore > highScore) {
+        highScore = totalScore;
+    }
+
     add([
         text("CLEAR!\nスペースキーでリスタート", {
             size: 48,
             align: "center",
         }),
-        pos(width() / 2, height() / 2 - 40), // 少し上に調整
+        pos(width() / 2, height() / 2 - 80),
+        anchor("center"),
+        color(255, 255, 0),
+    ]);
+
+    add([
+        text("スコア: " + totalScore, { size: UI_TEXT_SIZE }),
+        pos(width() / 2, height() / 2 - 20),
         anchor("center"),
         color(255, 255, 0),
     ]);
 
     add([
         text("取得コイン数: " + coinsCollected, { size: UI_TEXT_SIZE }),
+        pos(width() / 2, height() / 2 + 20),
+        anchor("center"),
+        color(255, 255, 0),
+    ]);
+
+    add([
+        text("ハイスコア: " + highScore, { size: UI_TEXT_SIZE }),
         pos(width() / 2, height() / 2 + 60),
         anchor("center"),
         color(255, 255, 0),
     ]);
 
     onKeyPress("space", () => {
-        resetGameStats(); // ゲーム状態をリセット
+        resetGameStats();
         go("main");
     });
 });
